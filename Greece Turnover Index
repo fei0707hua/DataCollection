@@ -1,0 +1,101 @@
+'''
+Summary: 
+This program automates the process of scraping Excel file links related to industrial turnover indices from the Hellenic Statistical Authority website, downloads the files, extracts key metadata (like the year), modifies the data accordingly, and finally saves it as cleaned CSV files for further analysis or reporting.
+
+Techniques:
+1. Web Scraping with BeautifulSoup: Extracts Excel file links by matching link text with known titles. Uses a predefined dictionary to match filenames and associate them with codes for downstream processing.
+2. Data Parsing with pandas and numpy: Loads Excel sheets and normalizes data using NumPy. Parses the year from a descriptive cell. Inserts the extracted year above the January data in each tab to prepare for CSV export. Saves the modified data to a CSV file named using the file code and the extracted year.
+3. Handling Missing Content: Checks if any matching files are available and send out error messages if the latest data isn't released yet.
+
+'''
+
+import requests
+from bs4 import BeautifulSoup
+import pandas as pd
+import numpy as np
+
+def get_excel_links(url, file_lst):
+    """
+    Fetches Excel file links from a given URL based on predefined file titles.
+    """
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    content_all = soup.find_all(class_='titleCol')
+    
+    link_lst = {}
+    if content_all:
+        for content in content_all:
+            files = content.find_all('a')
+            for file in files:
+                for file_code, file_title in file_lst.items():
+                    if file_title in file.text:
+                        file_link = file['href']
+                        link_lst[file_code] = file_link
+    return link_lst
+
+def download_excel_files(link_lst):
+    """
+    Downloads Excel files from the provided links and saves them locally
+    """
+    for file_code, file_link in link_lst.items():
+        response = requests.get(file_link)
+        with open(f'{file_code}.xlsx', 'wb') as file:
+            file.write(response.content)
+        print(f'{file_code}.xlsx has been saved')
+
+def search_term(df, keyword):
+    """
+    define a function to searche for a keywords within a Pandas DataFrame and returns the row and column indices of the first match.
+    """
+    data_array = df.to_numpy(dtype=str) 
+    data_array = np.char.lower(np.char.strip(data_array.astype(str)))
+    match_indices = np.argwhere(np.char.find(data_array, keyword) >= 0)
+
+    row_idx, col_idx = match_indices[0] 
+    matched_value = df.iloc[row_idx, col_idx]
+    return row_idx, col_idx, matched_value
+
+def process_excel_files(file_code):
+    """
+    Processes an Excel file to extract the year, place it above the month, and save the data as a CSV file.
+    """
+    file_path = f'{file_code}.xlsx'
+    excel_file = pd.ExcelFile(file_path)
+    
+    for sheet_name in excel_file.sheet_names:
+        df = pd.read_excel(file_path, sheet_name=sheet_name, index_col=False, header=None)
+
+        year_cell = search_term(df, 'turnover index')
+        year = year_cell[2].split(',')[1].lower().replace('year', '').strip()
+
+        month_cell = search_term(df, 'jan')
+        df.iloc[month_cell[0]-1, month_cell[1]] = year
+
+        sheet_name = file_code + year
+        df.to_csv(f'{sheet_name}.csv', index=False, header = False)
+        print(f'{year} is saved for {file_code} as csv')
+
+def main():
+    """
+    Main function to orchestrate the data extraction, downloading, and processing.
+    """
+    url = 'https://www.statistics.gr/en/statistics/-/publication/DKT24/'
+    file_lst = {
+        "TURNTOT": "Monthly evolution of the Turnover Index in Industry for the Total Market",
+        "TURNDOM": "Monthly evolution of the Turnover Index in Industry for the Domestic Market",
+        "TURNNDOM": "Monthly evolution of the Turnover Index in Industry for the Non - Domestic Market",
+        "TURNEURO": "Monthly evolution of the Turnover Index in Industry for the Eurozone Countries",
+        "TURNOTHER": "Monthly evolution of the Turnover Index in Industry for the Non - Eurozone Countries"
+    }
+
+    link_lst = get_excel_links(url, file_lst)
+
+    if link_lst:
+        download_excel_files(link_lst)
+        for file_code in link_lst.keys():
+            process_excel_files(file_code)
+    else:
+        print('''The latest month is not out. Please try again later.''')
+
+if __name__ == "__main__":
+    main()
