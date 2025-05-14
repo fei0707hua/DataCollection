@@ -1,0 +1,79 @@
+'''
+Summary:
+This Python script automates the ELT process of time series data from the Andorran Government Statistics Portal related to electricity and energy. It extracts structured JSON data embedded in an HTML response, transforms it into a tabular format, and saves the results as CSV files.
+
+Techniques:
+1. Data Retrieval with requests: Fetches raw web content from pre-defined URLs using hidden API.
+2. Web Scraping with BeautifulSoup: Parses HTML content to locate a JSON payload. Converts the extracted JSON string into a dictionary for structured access.
+3. Iterative Data Transformation: Iterates through multiple time series, identified by codes and descriptors. Converts the filtered dictionary to a DataFrame using pandas. Sets dates as row indices, with each time series as a separate column. Saves the final DataFrame as a .csv file with the filename corresponding to the dataset.
+'''
+
+import json
+import requests
+import pandas as pd
+from bs4 import BeautifulSoup
+
+url_elec = 'https://sig.govern.ad/SIGDDE.Public/EstadistiquesDades/Grid_TablaDatosEstadisticos?IdDivisio=98&DataIniciDades=01%2F01%2F1993%2000%3A00%3A00&DataFiDades=06%2F30%2F2050%2000%3A00%3A00&Variacio=Cap&Publicada=True&Validada=True&Idioma=en'
+url_nrg = 'https://sig.govern.ad/SIGDDE.Public/EstadistiquesDades/Grid_TablaDatosEstadisticos?IdDivisio=97&DataIniciDades=01%2F01%2F1993%2000%3A00%3A00&DataFiDades=06%2F30%2F2050%2000%3A00%3A00&Publicada=True&Validada=True&Idioma=en'
+
+print('Downloading data. Please be patient.')
+
+class AndorraZ60:
+
+	def __init__(self, url, filename):
+		self.url = url
+		self.filename = filename
+
+	def fetch_data(self):
+		self.source = requests.get(self.url).text
+		self.soup = BeautifulSoup(self.source, 'lxml')
+		self.json_string = self.soup.p.text
+		self.json_dict = json.loads(self.json_string)
+		self.result = self.json_dict['Data']
+
+	def read_data(self):
+
+		# Initialize an empty dictionary to store the data
+		self.data_dict = {}
+		# Iterate over the series in the result
+		self.num_of_time_series = int(len(self.result))
+		for i in range(self.num_of_time_series):
+			self.series = self.result[i]
+			self.code = self.series['A_Codi']
+			self.concept= self.series['A_Descripcio']
+			self.descriptor = self.code + ' ' + self.concept
+
+			# Initialize lists to store dates and figures
+			self.keys = []
+			self.values = []
+			for self.k, self.v in self.series.items():
+				self.keys.append(self.k)
+				self.values.append(self.v)
+			self.dates = self.keys[2:]
+			self.figures = self.values[2:]
+
+			# Fill in the data_dict with dates and corresponding figures
+			for self.date, self.figure in zip(self.dates, self.figures):
+				# checks whether the current date is already a key in the dictionary
+				if self.date not in self.data_dict:
+					# create a dic inside a dic
+					self.data_dict[self.date] = {}
+				# add 2 entries to this inner dictionary where date and descriptor are the key
+				self.data_dict[self.date][self.descriptor] = self.figure
+				self.filtered_dict = {self.key: self.value for self.key, self.value in self.data_dict.items() if 'TipusResultat' not in self.key}
+
+			# Convert the data dictionary to a DataFrame
+			# creates a DataFrame from a dictionary
+			# pandas treats the dictionary keys as the row indices 
+			self.df = pd.DataFrame.from_dict(self.filtered_dict, orient='index')
+			self.df.to_csv(f'{self.filename}.csv', index = True, header = True)
+
+	def run_all(self):
+		self.fetch_data()
+		self.read_data()
+		print(f'{self.filename}.csv has been downloaded')
+
+elec = AndorraZ60(url_elec, 'elec').run_all()
+nrg =  AndorraZ60(url_nrg, 'nrg').run_all()
+
+
