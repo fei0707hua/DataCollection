@@ -1,3 +1,17 @@
+''' 
+Summary:
+This program is designed to automate the collection, processing, and storage of international trade statistics from the Portuguese National Statistics Institute (INE). Its primary purpose is to systematically download large sets of export and import data-across different countries, goods categories, and time periods-then process and save this information as CSV files for further analysis or reporting.
+
+Highlighted Techniques
+1. Dynamic Date Range Calculation
+2. API Interaction and Data Fetching
+3. HTML/XML Parsing
+4. Data Processing and Transformation
+5. Efficient File Handling
+6. Parallel Execution
+7. Modular and Scalable Design
+'''
+
 import requests
 import csv
 import os
