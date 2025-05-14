@@ -5,7 +5,9 @@
 4. Andorra Energy
 
 # Tool and techniques
-1. Python (library: requests, BeautifulSoup, csv, concurrent.futures, datetime)
-2. API integration and automation
-4. Error handling & resilience
-5. Modular design for scalable multi-dataset workflows
+1. Web scrapping: requests, BeautifulSoup
+2. API integration and automation: official API document, curl
+3. Data transformation: csv, pandas, numpy
+4. Natural Language Parsing: regular expressions
+5. Error handling & resilience: threading pool, multiprocessing 
+6. Modular design for scalable multi-dataset workflows
