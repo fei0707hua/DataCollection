@@ -1,0 +1,139 @@
+'''
+Summary:
+This Python script automates the extraction of key inflation indicators from Statbel, the Belgian statistical office. It parses and interprets natural language text to extract percentages and time references, then maps them to specific dates and saves the data to a CSV file.
+
+Techniques:
+1. File Management with os: Deletes the existing press.csv file if it exists, ensuring only fresh data is stored.
+2. Web Scraping: Uses BeautifulSoup to extracts paragraphs and list items that contain key indicators like: Core inflation, HICP, and Energy inflation.
+3. Natural Language Parsing: Extracts date and percentage values using regular expressions. Handles multiple formats of time references like "this month", "last month", or named months.
+4. Date and Time Handling with datetime: Converts natural language time references into Month Year format. Adjusts year correctly for edge cases like January and December.
+5. Modular and Scalable Design: Generalizes the parsing logic for various economic indicators.
+'''
+
+import os
+import re
+import csv
+import requests
+import pandas as pd
+from bs4 import BeautifulSoup
+from datetime import datetime
+
+# Part 1
+# delete existing press.csv in the working directory
+filename = "press.csv"
+
+if os.path.exists(filename):
+    os.remove(filename)
+    result = f"{filename} has been deleted."
+else:
+    result = f"{filename} does not exist."
+
+print(result)
+
+# Part 2
+# Find paragraph with keywords
+url = 'https://statbel.fgov.be/en/themes/consumer-prices/consumer-price-index'
+source = requests.get(url)
+soup = BeautifulSoup(source.content, 'html.parser')
+
+# Find the article
+content = soup.find('div', class_='field field--name-body field--type-text-with-summary field--label-hidden field__item')
+
+# Get the line with current date
+date_line = content.p.strong.text
+# print(date_line)
+
+# Get core inflation
+bullet_points = content.ul.find_all('li')
+for point in bullet_points:
+    if 'Core inflation' in point.strong.text:
+        core_inflation = point.text
+        break
+# print(core_inflation)
+
+# Get HICP
+rows = content.find_all('p')
+for row in rows:
+    if 'European harmonised index of consumer price' in row.text:
+        HICP = row.text
+    elif 'HICP flash' in row.text:
+        HICP = row.text
+# print(HICP)
+
+# Get energy inflation
+header = content.find('h2', string="Comment on inflation")
+next_tag = header.find_next('p')
+paragraph = next_tag.text.split('. ')
+energy = paragraph[0] + '. ' + paragraph[1]
+# print(energy)
+
+# Get energy inflation from a different source
+next_tags = header.find_next_siblings("p") 
+for next_tag in next_tags:
+        if 'Energy' in next_tag.strong.text:
+                energy_main = next_tag.text
+                break
+print(energy_main)
+
+
+# Part 3: define the pattern and execute 
+class Mapping:
+
+    def __init__(self, concept, paragraph, date_line):
+        self.concept = concept
+        self.paragraph = paragraph
+        self.date_line = date_line
+
+    def current(self):
+        self.month_mapping = {
+            "January": 1, "February": 2, "March": 3, "April": 4,
+            "May": 5, "June": 6, "July": 7, "August": 8,
+            "September": 9, "October": 10, "November": 11, "December": 12
+        }
+        date_pattern = r'\b(January|February|March|April|May|June|July|August|September|October|November|December) \d{4}\b'
+        self.match = re.search(date_pattern, self.date_line)
+        self.mapping_mth = self.match.group().split(' ')[0]
+        self.current_mth = self.month_mapping[self.mapping_mth]
+        self.current_yr = int(self.match.group().split(' ')[1])
+
+    def find_match(self):
+        pattern = r'(\d+\.\d+%)\s+(this month|last month|in (January|February|March|April|May|June|July|August|September|October|November|December))'
+        self.matches = re.findall(pattern, self.paragraph)
+        file_name = 'press.csv'
+
+        for self.match in self.matches:
+            self.percentage, self.time_reference, self.month = self.match
+
+            if self.time_reference == 'this month':
+                self.month_num = self.current_mth
+                self.year = self.current_yr
+
+            elif self.time_reference == 'last month':
+                self.month_num = self.current_mth - 1 if self.current_mth > 1 else 12
+                self.year = self.current_yr if self.current_mth > 1 else self.current_yr - 1
+
+            elif self.month:
+                self.month_num = self.month_mapping[self.month]
+                if 1 <= self.month_num <= self.current_mth:
+                    self.year = self.current_yr
+                else:
+                    self.year = self.current_yr - 1
+
+            self.formatted_date = datetime(self.year, self.month_num, 1).strftime("%B %Y")
+            self.lst = [self.concept, self.formatted_date, self.percentage]
+            print(self.lst)
+
+            with open(file_name, 'a', newline='') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(self.lst)
+
+    def batch_process(self):
+        self.current()
+        self.find_match()
+
+mapping_core_inflation = Mapping('core inflation', core_inflation, date_line).batch_process()
+mapping_hicp = Mapping('HICP', HICP, date_line).batch_process()
+mapping_energy = Mapping('energy', energy, date_line).batch_process()
+mapping_energy_main = Mapping('energy_main', energy_main, date_line).batch_process()
+print('Check out press.csv for data')
+
